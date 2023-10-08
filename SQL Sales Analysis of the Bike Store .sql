@@ -3,9 +3,9 @@
 -------------------- 1. Data Consistency Check ----------------------
 
 declare @InconsistencyCustomer int, 
-	    @InconsistencyStaff int,
-		@InconsistencyStore int,
-		@InconsistencyOrder int;
+	@InconsistencyStaff int,
+	@InconsistencyStore int,
+	@InconsistencyOrder int;
 
 -- 1.1. Customer_id
 		-- Checking missing customer_id values
@@ -28,7 +28,7 @@ declare @InconsistencyCustomer int,
 		-- Checking missing staff_id values
 		select @InconsistencyStaff = count(distinct o.staff_id)
 		from sales.orders o
-		where o.staff_id NOT IN (
+		where o.staff_id not in (
 			select distinct staff_id from sales.staffs);
 
 		-- If inconsistencies are found, send an email notification
@@ -44,9 +44,9 @@ declare @InconsistencyCustomer int,
 -- 1.3. Store_id
 		-- Checking missing store_id values
 		select @InconsistencyStore = count(distinct o.store_id)
-		FROM sales.orders o
-		WHERE o.store_id NOT IN (
-			SELECT DISTINCT store_id FROM sales.stores);
+		from sales.orders o
+		where o.store_id not in (
+			select distinct store_id FROM sales.stores);
 
 		-- If inconsistencies are found, send an email notification
 		if @InconsistencyStore > 0
@@ -62,7 +62,7 @@ declare @InconsistencyCustomer int,
 		-- Checking missing order_id values in sales.order_items
 		select @InconsistencyOrder = count(distinct oi.order_id)
 		from sales.orders oi
-		where oi.order_id NOT IN (
+		where oi.order_id not in (
 			select distinct order_id from sales.order_items);
 
 		-- If there are any inconsistencies, send an email notification
@@ -214,18 +214,18 @@ declare @InconsistencyCustomer int,
 		drop table if exists #MonthlyDataPrep1
 
 		select  eomonth(o.order_date) as OrderMonth
-			  , sum(case when o.order_status = 4 then ord.OrderAmount end) as CompletedSalesAmount					-- Sum of sales with order status = 'Completed'
-			  , sum(case when o.order_status in (1,2) then ord.OrderAmount end) as PendingSalesAmount				-- Sum of sales with order status = 'Pending' or 'Processing'
-			  , sum(case when o.order_status = 3 then ord.OrderAmount end) as LostSalesAmount						-- Sum of sales with order status = 'Rejected'
+			  , sum(case when o.order_status = 4 then ord.OrderAmount end) as CompletedSalesAmount				-- Sum of sales with order status = 'Completed'
+			  , sum(case when o.order_status in (1,2) then ord.OrderAmount end) as PendingSalesAmount			-- Sum of sales with order status = 'Pending' or 'Processing'
+			  , sum(case when o.order_status = 3 then ord.OrderAmount end) as LostSalesAmount				-- Sum of sales with order status = 'Rejected'
 			  , avg(case when o.order_status = 4 then ord.OrderAmount end) as AverageCompletedOrderAmount			-- Average order amount with order status = 'Completed'
-			  , min(case when o.order_status = 4 then ord.OrderAmount end) as MinCompletedOrderAmount				-- Min order amount with order status = 'Completed'
-			  , max(case when o.order_status = 4 then ord.OrderAmount end) as MaxCompletedOrderAmount				-- Max order amount with order status = 'Completed'
-			  , count(distinct case when o.order_status = 4 then o.order_id end) as NumCompletedOrders				-- Number of completed orders
-			  , count(distinct case when o.order_status = 3 then o.order_id end) as NumLostOrders					-- Number of rejected orders
+			  , min(case when o.order_status = 4 then ord.OrderAmount end) as MinCompletedOrderAmount			-- Min order amount with order status = 'Completed'
+			  , max(case when o.order_status = 4 then ord.OrderAmount end) as MaxCompletedOrderAmount			-- Max order amount with order status = 'Completed'
+			  , count(distinct case when o.order_status = 4 then o.order_id end) as NumCompletedOrders			-- Number of completed orders
+			  , count(distinct case when o.order_status = 3 then o.order_id end) as NumLostOrders				-- Number of rejected orders
 			  , count(distinct case when o.order_status = 4 then o.customer_id end) as NumCustomersWithOrders		-- Number of customers with completed orders
-			  , count(distinct LostCustomers) as LostCustomers														-- Number of customers with only rejected orders
-			  , count(distinct prev.customer_id) as RetainedCustomers												-- Customers with previous completed orders who placed orders this month
-			  , count(distinct DelayedOrders) as DelayedOrders														-- Orders that were shipped after the required delivery date
+			  , count(distinct LostCustomers) as LostCustomers								-- Number of customers with only rejected orders
+			  , count(distinct prev.customer_id) as RetainedCustomers							-- Customers with previous completed orders who placed orders this month
+			  , count(distinct DelayedOrders) as DelayedOrders								-- Orders that were shipped after the required delivery date
 		into #MonthlyDataPrep1
 		from #LostCustOrders o
 
@@ -271,32 +271,32 @@ declare @InconsistencyCustomer int,
 		drop table if exists #MonthlyDataPrep3
 
 		select  p2.OrderMonth																																																
-			  , p2.CompletedSalesAmount as [Completed Sales Amount]										-- Sum of sales with order status = 'Completed'																				
-			  , p2.PendingSalesAmount as [Pending Sales Amount]											-- Sum of sales with order status = 'Pending' or 'Processing'
-			  , p2.LostSalesAmount as [Lost Sales Amount]												-- Sum of sales with order status = 'Rejected'
-			  , p2.PercentOfLostSales as [% Of Lost Sales]												-- % of lost order amount of the completed, pending, processing order amount
-			  , p2.PercentofLast3MonthAv as [Current Month vs Last 3 Month Av]							-- This month's sales compared to the average of the past three months
-			  , p2.RTCompletedSales as [Year-to-Date Sales Amount]										-- Cumulative sales from the beginning of the current year until current month
-			  , prev2.RTCompletedSales as [Prev Year-to-Date Sales Amount]								-- Previous year's year-to-date sales for the same month
+			  , p2.CompletedSalesAmount as [Completed Sales Amount]								-- Sum of sales with order status = 'Completed'																				
+			  , p2.PendingSalesAmount as [Pending Sales Amount]								-- Sum of sales with order status = 'Pending' or 'Processing'
+			  , p2.LostSalesAmount as [Lost Sales Amount]									-- Sum of sales with order status = 'Rejected'
+			  , p2.PercentOfLostSales as [% Of Lost Sales]									-- % of lost order amount of the completed, pending, processing order amount
+			  , p2.PercentofLast3MonthAv as [Current Month vs Last 3 Month Av]						-- This month's sales compared to the average of the past three months
+			  , p2.RTCompletedSales as [Year-to-Date Sales Amount]								-- Cumulative sales from the beginning of the current year until current month
+			  , prev2.RTCompletedSales as [Prev Year-to-Date Sales Amount]							-- Previous year's year-to-date sales for the same month
 			  , case when isnull(prev2.RTCompletedSales,0) > 0 
 					 then round(cast(p2.RTCompletedSales as float) / prev2.RTCompletedSales, 2) 
-					 end as [% Year-to-Date Cur Month vs Year-to-Date Prev Year Month]					-- Current year-to-date sales compared to the same period in the previous year
-			  , prev2.CompletedSalesAmount as [Prev Year Month]											-- Sales for the same month in the previous year
+					 end as [% Year-to-Date Cur Month vs Year-to-Date Prev Year Month]				-- Current year-to-date sales compared to the same period in the previous year
+			  , prev2.CompletedSalesAmount as [Prev Year Month]								-- Sales for the same month in the previous year
 			  , case when isnull(prev2.CompletedSalesAmount,0) > 0 
 					 then round(cast(p2.CompletedSalesAmount as float) / prev2.CompletedSalesAmount, 2) 
-					 end as [% Current Month vs Prev Year Month]										-- Comparison of sales between the same months in the previous year and the current year
+					 end as [% Current Month vs Prev Year Month]							-- Comparison of sales between the same months in the previous year and the current year
 			  , p2.AverageCompletedOrderAmount as [Average Completed Order Amount]						-- Average order amount with order status = 'Completed'
-			  , p2.MinCompletedOrderAmount as [Min Completed Order Amount]								-- Min order amount with order status = 'Completed'
-			  , p2.MaxCompletedOrderAmount as [Max Completed Order Amount]								-- Max order amount with order status = 'Completed'
-			  , p2.NumCompletedOrders as [# Completed Orders]											-- Number of completed orders
-			  , p2.NumLostOrders as [# Lost Orders]														-- Number of rejected orders
-			  , p2.DelayedOrders as [# Delayed Orders]													-- Orders that were shipped after the required delivery date
-			  , p2.NumCustomersWithOrders as [# Customers With Orders]									-- Number of customers with completed orders
-			  , p2.LostCustomers as [# Lost Customers]													-- Number of customers with only rejected orders
-			  , p2.RetainedCustomers as [# Retained Customers]											-- Customers with previous completed orders who placed orders this month
-			  , tm.ManagerName as [Top Performing Manager]												-- Sales manager with the highest sales amount this month
-			  , tp.ProductNameAndBrand as [Top Selling Product (Brand)]									-- Top Selling Product this month
-			  , ts.StoreName as [Top Performing Store (State)]											-- Store with the highest sales amount this month
+			  , p2.MinCompletedOrderAmount as [Min Completed Order Amount]							-- Min order amount with order status = 'Completed'
+			  , p2.MaxCompletedOrderAmount as [Max Completed Order Amount]							-- Max order amount with order status = 'Completed'
+			  , p2.NumCompletedOrders as [# Completed Orders]								-- Number of completed orders
+			  , p2.NumLostOrders as [# Lost Orders]										-- Number of rejected orders
+			  , p2.DelayedOrders as [# Delayed Orders]									-- Orders that were shipped after the required delivery date
+			  , p2.NumCustomersWithOrders as [# Customers With Orders]							-- Number of customers with completed orders
+			  , p2.LostCustomers as [# Lost Customers]									-- Number of customers with only rejected orders
+			  , p2.RetainedCustomers as [# Retained Customers]								-- Customers with previous completed orders who placed orders this month
+			  , tm.ManagerName as [Top Performing Manager]									-- Sales manager with the highest sales amount this month
+			  , tp.ProductNameAndBrand as [Top Selling Product (Brand)]							-- Top Selling Product this month
+			  , ts.StoreName as [Top Performing Store (State)]								-- Store with the highest sales amount this month
 		into #MonthlyDataPrep3
 		from #MonthlyDataPrep2 p2
 
@@ -321,4 +321,4 @@ declare @InconsistencyCustomer int,
 -- 2.1.5. Final Table
 
 		select * from #MonthlyDataPrep3 p3
-		where p3.OrderMonth <= '2018-03-31' -- filtered out as there no completed orders after March 2018
+		where p3.OrderMonth <= '2018-03-31' -- filtered out as there are no completed orders after March 2018
