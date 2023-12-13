@@ -1,0 +1,202 @@
+/*
+The goal is to check if an employee has a certain number of the equal entry times over a period.
+
+The conditions for flagging such days include:
+- having more than two identical days within the same month and year.
+- these days must have the same number of entries, and the entry times should match (e.g., 1st entry on one day is compared to 1st entry on another day, etc).
+- all time entries values of the different days should correspond (e.g. if only 2 ot of 3 entries are equal, the days are not considered equal).
+  The use of a unique ID, which combines all values from the Time column within a given day, helps ensure that.
+
+The result is a group of days with completely identical entries by employees.
+*/
+
+-- Create a table
+drop table if exists #clock_in_data
+create table #clock_in_data (
+    Date date,
+    Time varchar(max),
+    PersonID varchar(max)
+);
+
+-- Insert simulated data into the table
+insert into #clock_in_data (Date, Time, PersonID) values
+('2023-01-01', '08:01', 'EMP1'),
+('2023-01-01', '15:34', 'EMP1'),
+('2023-01-03', '08:01', 'EMP1'),
+('2023-01-03', '15:34', 'EMP1'),
+('2023-01-04', '08:01', 'EMP1'),
+('2023-01-04', '15:34', 'EMP1'),
+('2023-01-04', '16:57', 'EMP1'),
+('2023-01-05', '08:01', 'EMP1'),
+('2023-01-05', '15:34', 'EMP1'),
+('2023-01-05', '09:02', 'EMP2'),
+('2023-01-06', '09:02', 'EMP2'),
+('2023-01-07', '09:02', 'EMP2'),
+('2023-01-08', '09:02', 'EMP2'),
+('2023-01-08', '12:45', 'EMP2'),
+('2023-01-15', '11:16', 'EMP3'),
+('2023-01-21', '11:16', 'EMP3'),
+('2023-01-21', '16:01', 'EMP3'),
+('2023-01-23', '11:16', 'EMP3'),
+('2023-01-25', '10:16', 'EMP4'),
+('2023-01-28', '09:23', 'EMP4'),
+('2023-02-01', '09:23', 'EMP4'),
+('2023-02-02', '09:23', 'EMP4'),
+('2023-02-05', '09:23', 'EMP4'),
+('2023-02-05', '09:31', 'EMP4'),
+('2023-02-08', '09:23', 'EMP4'),
+('2023-02-12', '07:07', 'EMP5'),
+('2023-02-12', '10:19', 'EMP5'),
+('2023-02-12', '15:41', 'EMP5'),
+('2023-02-15', '07:07', 'EMP5'),
+('2023-02-15', '10:19', 'EMP5'),
+('2023-02-15', '15:41', 'EMP5'),
+('2023-02-17', '07:07', 'EMP5'),
+('2023-02-17', '10:19', 'EMP5'),
+('2023-02-17', '15:41', 'EMP5'),
+('2023-02-19', '07:00', 'EMP5'),
+('2023-02-19', '10:20', 'EMP5'),
+('2023-02-19', '15:41', 'EMP5'),
+('2023-02-21', '09:32', 'EMP5'),
+('2023-02-22', '09:32', 'EMP5'),
+('2023-02-25', '09:32', 'EMP5'),
+('2023-02-28', '09:32', 'EMP5');
+
+
+
+drop table if exists #ranks
+select   c.Date
+	   , c.PersonID
+	   , c.Time
+	   , row_number() over(partition by c.PersonID, c.Date
+						   order by convert(int, left(c.Time, charindex(':', c.Time + ':') - 1)),
+									convert(int, substring(c.Time, charindex(':', c.Time) + 1, 2))) as RowRnk		-- rank within Person-Date to be able to compare the same lines
+	   , count(c.Date) over(partition by c.PersonID, c.Date ) as max_rows											-- naumber of rows for each date
+into #ranks
+from #clock_in_data c
+
+
+-- creating an 'ID' that consists of all Time values that exist within each Person-Date
+drop table if exists #forupdate
+drop table if exists #byupdate
+
+select  r.PersonID
+	  , r.Date
+	  , r.Time
+	  , replace(r.Time, ':', '') as ID
+	  , r.RowRnk
+	  , r.max_rows
+into #forupdate
+from #ranks r
+
+select  r.PersonID
+	  , r.Date
+	  , r.Time
+	  , replace(r.Time, ':', '') as ID
+	  , r.RowRnk
+	  , r.max_rows
+into #byupdate
+from #ranks r
+
+-- loop for cancatenating the ID values of different rows into 1 to create a joint ID
+declare @maxnum int, @count int;
+select @maxnum = max(RowRnk) from #forupdate;  -- get a max number of rows in a date 
+select @count = 1;
+
+while @count <= @maxnum -1 -- the loop should run one time fewer than the maximum number of rows in a Date
+begin
+	update #forupdate
+	set ID = concat(b.ID, f.ID)
+	from #forupdate f
+
+	left join #byupdate b
+		on f.PersonID = b.PersonID
+		and f.Date = b.Date
+		and f.RowRnk = b.RowRnk + @count;
+	set @count = @count + 1;
+end;
+
+-- adding the new joint ID to the table
+drop table if exists #withID
+
+select  r.Date
+	  , r.PersonID
+	  , r.Time
+	  , r.max_rows
+	  , r.RowRnk
+	  , f.ID
+into #withID
+from #ranks r
+
+left join #forupdate f
+	on r.PersonID = f.PersonID
+	and r.Date = f.Date
+	and f.RowRnk = f.max_rows
+
+
+-- find all pairs of the equal days
+drop table if exists #pairs
+select w.PersonID
+	, w.Date as Date_1
+	, w.Time as Time_1
+	, w.max_rows as max_rows_1
+	, w.RowRnk as RowRnk_1
+	, w.ID as ID_1
+	, w2.Date as Date_2
+	, w2.Time as Time_2
+	, w2.max_rows as max_rows_2
+	, w2.RowRnk as RowRnk_2
+	, w2.ID as ID_2
+into #pairs
+from #withID w
+
+
+left join #withID w2
+	on w.PersonID = w2.PersonID
+	and month(w.Date) = month(w2.Date)  -- all comparions are within the same month
+	and year(w.Date) = year(w2.Date)    -- all comparions are within the same year
+	and w.Date <> w2.Date				-- compare different days
+	and w.RowRnk = w2.RowRnk			-- join on the rank column to compare the same rows within Person-Date (1st with 1st, 2nd with 2nd, etc.)
+	and w.max_rows = w2.max_rows	    -- join on the max number of rows column to compare only dates with equal number of rows
+	and w.ID = w2.ID					-- join on the joint ID to avoid situations when some values in the Time column within Person-Date correspond and the others don't
+	and w.Time = w2.Time			    -- find the same time values
+
+
+
+drop table if exists #final
+select    tt.Date
+		, tt.PersonID
+		, tt.rnk_in_group
+		, tt.RowRnk
+		, tt.Time
+		, max(tt.rnk_in_group) over(partition by tt.PersonID, year(tt.Date), month(tt.Date), tt.ID) as num_in_group	     -- number equal days in a group to filter out <=2 repititions
+		, dense_rank() over(partition by tt.PersonID, year(tt.Date), month(tt.Date) order by tt.ID) as groups     -- rank all groups by employee, month, year to see how many such groups each emplyee has
+into #final
+from(select t.*
+			, dense_rank() over(partition by t.PersonID, year(t.Date), month(t.Date), ID order by t.Date) as rnk_in_group -- number of instances in a group
+	from(
+		 select   p.Date_1 as Date
+				, p.PersonID
+				, p.Time_1 as Time
+				, p.RowRnk_1 as RowRnk
+				, p.ID_1 as ID
+		 from #pairs p
+		 union							-- the use of union and not union all ensures the removal of duplicates
+		 select   p.Date_2 as Date
+				, p.PersonID
+				, p.Time_2 as Time
+				, p.RowRnk_2 as RowRnk
+				, p.ID_2 as ID
+		 from #pairs p
+		)t
+	)tt
+
+select f.Date							-- date of the entry
+	 , f.PersonID						-- employee ID in the internal system
+	 , f.rnk_in_group				    -- sort of the days in a group 
+	 , f.RowRnk							-- time entries sort from the earliset to the latest
+	 , f.Time						    -- time entry
+	 , f.num_in_group					-- number of days in a groups
+	 , dense_rank() over(partition by f.PersonID, month(f.Date), year (f.Date) order by f.groups) as groups -- number of groups by an employee
+from #final f
+where f.num_in_group > 2				-- only groups with > 2 identical days
